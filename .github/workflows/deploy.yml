@@ -84,8 +84,7 @@ jobs:
             --exclude='.github' \
             --exclude='.env' \
             --exclude='.env.deploy' \
-            --exclude='deploy.tar.gz' \
-            -czf deploy.tar.gz .
+            -czf "$RUNNER_TEMP/deploy.tar.gz" .
 
       - name: Upload files
         shell: bash
@@ -95,7 +94,7 @@ jobs:
           SCP=(scp -i "$HOME/.ssh/deploy_key" -P "$SSH_PORT")
 
           "${SSH[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH'"
-          "${SCP[@]}" deploy.tar.gz "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/deploy.tar.gz"
+          "${SCP[@]}" "$RUNNER_TEMP/deploy.tar.gz" "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/deploy.tar.gz"
           "${SCP[@]}" .env.deploy "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/.env"
 
       - name: Start services
