@@ -1,0 +1,113 @@
+name: Deploy monitoring stack
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: monitoring-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+      GRAFANA_ADMIN_USER: ${{ vars.GRAFANA_ADMIN_USER || 'admin' }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+      PUBLIC_BIND_ADDRESS: ${{ vars.PUBLIC_BIND_ADDRESS || '0.0.0.0' }}
+      GRAFANA_PORT: ${{ vars.GRAFANA_PORT || '3020' }}
+      LOKI_PORT: ${{ vars.LOKI_PORT || '3100' }}
+      ALLOY_PORT: ${{ vars.ALLOY_PORT || '12345' }}
+      PROMETHEUS_PORT: ${{ vars.PROMETHEUS_PORT || '9090' }}
+      PROMETHEUS_RETENTION: ${{ vars.PROMETHEUS_RETENTION || '15d' }}
+
+      GRAFANA_VERSION: ${{ vars.GRAFANA_VERSION || 'latest' }}
+      LOKI_VERSION: ${{ vars.LOKI_VERSION || 'latest' }}
+      ALLOY_VERSION: ${{ vars.ALLOY_VERSION || 'latest' }}
+      PROMETHEUS_VERSION: ${{ vars.PROMETHEUS_VERSION || 'latest' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" || { echo "::error::SSH_HOST secret is required"; exit 1; }
+          test -n "$SSH_USER" || { echo "::error::SSH_USER secret is required"; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "::error::SSH_PRIVATE_KEY secret is required"; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "::error::DEPLOY_PATH secret is required"; exit 1; }
+          test -n "$GRAFANA_ADMIN_PASSWORD" || { echo "::error::GRAFANA_ADMIN_PASSWORD secret is required"; exit 1; }
+
+      - name: Prepare deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> "$HOME/.ssh/known_hosts"
+
+          {
+            printf 'GRAFANA_ADMIN_USER=%s\n' "$GRAFANA_ADMIN_USER"
+            printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASSWORD"
+            printf 'PUBLIC_BIND_ADDRESS=%s\n' "$PUBLIC_BIND_ADDRESS"
+            printf 'GRAFANA_PORT=%s\n' "$GRAFANA_PORT"
+            printf 'LOKI_PORT=%s\n' "$LOKI_PORT"
+            printf 'ALLOY_PORT=%s\n' "$ALLOY_PORT"
+            printf 'PROMETHEUS_PORT=%s\n' "$PROMETHEUS_PORT"
+            printf 'PROMETHEUS_RETENTION=%s\n' "$PROMETHEUS_RETENTION"
+            printf 'GRAFANA_VERSION=%s\n' "$GRAFANA_VERSION"
+            printf 'LOKI_VERSION=%s\n' "$LOKI_VERSION"
+            printf 'ALLOY_VERSION=%s\n' "$ALLOY_VERSION"
+            printf 'PROMETHEUS_VERSION=%s\n' "$PROMETHEUS_VERSION"
+          } > .env.deploy
+
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.env' \
+            --exclude='.env.deploy' \
+            --exclude='deploy.tar.gz' \
+            -czf deploy.tar.gz .
+
+      - name: Upload files
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/deploy_key" -p "$SSH_PORT")
+          SCP=(scp -i "$HOME/.ssh/deploy_key" -P "$SSH_PORT")
+
+          "${SSH[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p '$DEPLOY_PATH'"
+          "${SCP[@]}" deploy.tar.gz "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/deploy.tar.gz"
+          "${SCP[@]}" .env.deploy "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/.env"
+
+      - name: Start services
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/deploy_key" -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_PATH' && \
+             tar -xzf deploy.tar.gz && \
+             rm deploy.tar.gz && \
+             chmod 600 .env && \
+             docker compose pull && \
+             docker compose up -d --remove-orphans && \
+             docker compose ps"

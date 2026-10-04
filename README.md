@@ -57,6 +57,36 @@ docker compose up -d
 docker compose restart prometheus
 ```
 
+## Деплой через GitHub Actions
+
+Workflow `.github/workflows/deploy.yml` запускается при push в `main` или вручную
+через **Actions → Deploy monitoring stack → Run workflow**.
+
+Создайте GitHub Environment с именем `production`, затем добавьте в него
+секреты:
+
+- `SSH_HOST` — адрес сервера;
+- `SSH_USER` — пользователь с доступом к Docker;
+- `SSH_PRIVATE_KEY` — приватный SSH-ключ;
+- `DEPLOY_PATH` — каталог на сервере, например `/home/baxic/forlogs`;
+- `GRAFANA_ADMIN_PASSWORD` — пароль администратора Grafana.
+
+Доступные GitHub Variables и их значения по умолчанию:
+
+- `SSH_PORT`: `22`;
+- `GRAFANA_ADMIN_USER`: `admin`;
+- `PUBLIC_BIND_ADDRESS`: `0.0.0.0`;
+- `GRAFANA_PORT`: `3020`;
+- `LOKI_PORT`: `3100`;
+- `ALLOY_PORT`: `12345`;
+- `PROMETHEUS_PORT`: `9090`;
+- `PROMETHEUS_RETENTION`: `15d`;
+- `GRAFANA_VERSION`, `LOKI_VERSION`, `ALLOY_VERSION`,
+  `PROMETHEUS_VERSION`: `latest`.
+
+На сервере должны быть установлены Docker и Docker Compose, а SSH-пользователь
+должен иметь право выполнять `docker compose` без `sudo`.
+
 ## Важно
 
 Loki и Prometheus в этой конфигурации не имеют авторизации. Не открывайте порты
