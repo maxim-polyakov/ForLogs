@@ -69,20 +69,13 @@ Workflow `.github/workflows/deploy.yml` запускается при push в `m
 - `SSH_USER` — пользователь с доступом к Docker;
 - `SSH_PRIVATE_KEY` — приватный SSH-ключ;
 - `DEPLOY_PATH` — каталог на сервере, например `/home/baxic/forlogs`;
-- `GRAFANA_ADMIN_PASSWORD` — пароль администратора Grafana.
+- `ENV_FILE` — полное многострочное содержимое production-файла `.env`.
 
-Доступные GitHub Variables и их значения по умолчанию:
+В `ENV_FILE` нужно поместить все настройки из `.env.example`, указав production-
+пароль и нужные порты. Workflow сохранит секрет на сервере как
+`$DEPLOY_PATH/.env`.
 
-- `SSH_PORT`: `22`;
-- `GRAFANA_ADMIN_USER`: `admin`;
-- `PUBLIC_BIND_ADDRESS`: `0.0.0.0`;
-- `GRAFANA_PORT`: `3020`;
-- `LOKI_PORT`: `3100`;
-- `ALLOY_PORT`: `12345`;
-- `PROMETHEUS_PORT`: `9090`;
-- `PROMETHEUS_RETENTION`: `15d`;
-- `GRAFANA_VERSION`, `LOKI_VERSION`, `ALLOY_VERSION`,
-  `PROMETHEUS_VERSION`: `latest`.
+Единственная GitHub Variable — `SSH_PORT`; по умолчанию используется `22`.
 
 На сервере должны быть установлены Docker и Docker Compose, а SSH-пользователь
 должен иметь право выполнять `docker compose` без `sudo`.
