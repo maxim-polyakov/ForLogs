@@ -82,5 +82,7 @@ jobs:
              rm deploy.tar.gz && \
              chmod 600 .env && \
              docker compose pull && \
-             docker compose up -d --remove-orphans && \
-             docker compose ps"
+             sudo -n /usr/local/sbin/compose-k3s-sync \
+               --project-dir '$DEPLOY_PATH' \
+               --skip-build \
+               --timeout 15m"
