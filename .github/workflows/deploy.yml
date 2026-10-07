@@ -82,7 +82,7 @@ jobs:
              rm deploy.tar.gz && \
              chmod 600 .env && \
              docker compose pull && \
- bash "$DEPLOY_PATH/scripts/compose-k3s-sync.sh" \
+ stdbuf -oL -eL bash "$DEPLOY_PATH/scripts/compose-k3s-sync.sh" \
 
                --project-dir '$DEPLOY_PATH' \
                --skip-build \
