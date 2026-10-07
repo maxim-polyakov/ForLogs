@@ -82,7 +82,8 @@ jobs:
              rm deploy.tar.gz && \
              chmod 600 .env && \
              docker compose pull && \
-             sudo -n /usr/local/sbin/compose-k3s-sync \
+ bash "$DEPLOY_PATH/scripts/compose-k3s-sync.sh" \
+
                --project-dir '$DEPLOY_PATH' \
                --skip-build \
                --timeout 15m"
