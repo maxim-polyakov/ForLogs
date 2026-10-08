@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-logs-config
+  namespace: observability
+data:
+  config.alloy: |
+    local.file_match "kubernetes_pods" {
+      path_targets = [{
+        __path__ = "/var/log/pods/*/*/*.log",
+        job      = "kubernetes-pods",
+        node     = sys.env("NODE_NAME"),
+      }]
+    }
+
+    loki.source.file "kubernetes_pods" {
+      targets    = local.file_match.kubernetes_pods.targets
+      forward_to = [loki.process.kubernetes_pods.receiver]
+    }
+
+    loki.process "kubernetes_pods" {
+      stage.cri {}
+
+      stage.regex {
+        source     = "filename"
+        expression = "^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/\\d+\\.log$"
+      }
+
+      stage.labels {
+        values = {
+          namespace = "",
+          pod       = "",
+          container = "",
+        }
+      }
+
+      forward_to = [loki.write.local.receiver]
+    }
+
+    loki.write "local" {
+      endpoint {
+        url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy-logs
+  namespace: observability
+  labels:
+    app: observability-alloy
+spec:
+  selector:
+    matchLabels:
+      app: observability-alloy
+  template:
+    metadata:
+      labels:
+        app: observability-alloy
+    spec:
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: alloy
+          image: grafana/alloy@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - /etc/alloy/config.alloy
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy/config.alloy
+              subPath: config.alloy
+              readOnly: true
+            - name: pod-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: positions
+              mountPath: /var/lib/alloy/data
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-logs-config
+        - name: pod-logs
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: positions
+          hostPath:
+            path: /var/lib/alloy-observability
+            type: DirectoryOrCreate

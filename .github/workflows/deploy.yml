@@ -82,8 +82,13 @@ jobs:
              rm deploy.tar.gz && \
              chmod 600 .env && \
              docker compose pull && \
-             COMPOSE_K3S_LOCK_WAIT=300 COMPOSE_K3S_CLEAR_ORPHAN_LOCK=1 \
-             stdbuf -oL -eL bash '$DEPLOY_PATH/scripts/compose-k3s-sync.sh' \
+             sudo -n /usr/local/sbin/compose-k3s-sync \
                --project-dir '$DEPLOY_PATH' \
                --skip-build \
-               --timeout 15m"
+               --timeout 15m && \
+             k3s kubectl --kubeconfig '/home/$SSH_USER/.kube/config' apply \
+               -f '$DEPLOY_PATH/k8s/alloy-daemonset.yaml' && \
+             k3s kubectl --kubeconfig '/home/$SSH_USER/.kube/config' delete \
+               deployment observability-alloy \
+               -n observability \
+               --ignore-not-found"
