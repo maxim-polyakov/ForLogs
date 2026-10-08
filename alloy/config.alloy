@@ -34,6 +34,37 @@ loki.source.docker "local" {
   forward_to    = [loki.write.local.receiver]
 }
 
+local.file_match "kubernetes_pods" {
+  path_targets = [{
+    __path__ = "/var/log/pods/*/*/*.log",
+    job      = "kubernetes-pods",
+  }]
+}
+
+loki.source.file "kubernetes_pods" {
+  targets    = local.file_match.kubernetes_pods.targets
+  forward_to = [loki.process.kubernetes_pods.receiver]
+}
+
+loki.process "kubernetes_pods" {
+  stage.cri {}
+
+  stage.regex {
+    source     = "filename"
+    expression = "^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/\\d+\\.log$"
+  }
+
+  stage.labels {
+    values = {
+      namespace = "",
+      pod       = "",
+      container = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
